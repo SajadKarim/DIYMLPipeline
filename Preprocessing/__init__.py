@@ -36,7 +36,7 @@ def getDataType(value):
         types.append('Currency')
 
     #'12.2x12.2x12.2 in'
-    match = re.search(r'(^[^x\d]+$)|(^.+-)|(\..+$)\s?(cms|in|inch|inches|mms)?', str(value))
+    match = re.search(r'(^[^x\d]+$)|(^.+-)|(\..+$)\s?(cms|in|inch|inches|mms)', str(value))
     if match:
         types.append('Dimensions')
 
@@ -55,68 +55,125 @@ def getDataType(value):
     '''    
     return types
 
-data = {}
+
+def entityResolution():
+    pairs = {};
+    groups = {};
+    
+    rows = pd.read_csv('../data/monitor_entity_resolution_labelled_data.csv')
+    df = pd.DataFrame(rows['left_spec_id,right_spec_id,label'].str.split(',').tolist())
+    
+    groupCntr = 0
+    
+    for row in df.values.tolist():
+        groupId1 = -1
+        groupId2 = -1
+        
+        if row[2] != '1':
+            continue
+        
+        if row[0] in pairs:
+            groupId1 = pairs[row[0]]
+        if row[1] in pairs:
+            groupId2 = pairs[row[1]]
+
+        if groupId1 == -1 and groupId2 == -1:
+            groups[groupCntr] = [ row[0], row[1]]
+            pairs[row[0]] = groupCntr;
+            pairs[row[1]] = groupCntr;
+            groupCntr = groupCntr + 1
+        elif groupId1 == -1 and groupId2 != -1:
+            pairs[row[0]] = groupId2
+            groups[groupId2].append(row[0])
+        elif groupId1 != -1 and groupId2 == -1:
+            pairs[row[1]] = groupId1
+            groups[groupId1].append(row[1])
+        elif groupId1 != groupId2:
+            groups[groupCntr] = groups[groupId1] + groups[groupId2]
+            for val in groups[groupId1]:
+                pairs[val] = groupCntr
+            for val in groups[groupId2]:
+                pairs[val] = groupCntr
+            groups.pop(groupId1)
+            groups.pop(groupId2)
+            groupCntr = groupCntr + 1
+            
+    return pairs, groups
+
 # This method read all the json files and push the extracted information to a dictionary.
-'''
-    data = {
-        'key' : {                            // Key is concatenated value of 'site-name' and 'source-id'
-            'Source' : ''
-            'File' : ''
-            'Frequency' : ''
-            'Attribute' : ''
-            'Value' : ['','',.....,'']    // Array of values - since any 'site-name' may have numerous values for a 'source-id', therefore, instead of creating-
-                                             a separate entry at dictionary level, merging values at this level. 'Frequency' attribute in dictionary tells how-
-                                             many times the respective 'source-id' has occured.
-            'String' : 0
-            'Numeric' : 0
-            ..
-            ....
-            .....
-            'Ratio' : 0
-        },
-        key-2 : { },
-        key-3 : { },
-        .... N-3 objects ....
-        key-N : { }
-    }
-
-'''
-
-for root, dirs, files in os.walk('../data/data', topdown=False):
-    for name in files:
-        f = open(os.path.join(root, name), )
-        jsondata = json.load(f)
-        for key, value in jsondata.items():
-            id = os.path.basename(root) + key
-            if id not in data:                
-                data[id] = {}
-                data[id]['Source'] = os.path.basename(root)
-                data[id]['File'] = name;
-                data[id]['Frequency'] = 1;
-                data[id]['Attribute'] = remove_uncessary_tokens(key);
-                data[id]['Value'] = []
-                data[id]['Value'].append(remove_uncessary_tokens(value))
-            else:
-                if not any(str(value) in s for s in data[id]['Value']):
-                    data[id]['Frequency'] = data[id]['Frequency'] + 1
-                    data[id]['Value'].append( remove_uncessary_tokens(value))
-            datatypes = getDataType(value)
-            for dt in datatypes:
-                data[id][dt] = 1
-        f.close()
+def extractJSONFiles():
+    data = {}
+    '''
+        data = {
+            'key' : {                            // Key is concatenated value of 'site-name' and 'source-id'
+                'Source' : ''
+                'File' : ''
+                'Frequency' : ''
+                'Attribute' : ''
+                'Value' : ['','',.....,'']    // Array of values - since any 'site-name' may have numerous values for a 'source-id', therefore, instead of creating-
+                                                 a separate entry at dictionary level, merging values at this level. 'Frequency' attribute in dictionary tells how-
+                                                 many times the respective 'source-id' has occured.
+                'String' : 0
+                'Numeric' : 0
+                ..
+                ....
+                .....
+                'Ratio' : 0
+            },
+            key-2 : { },
+            key-3 : { },
+            .... N-3 objects ....
+            key-N : { }
+        }
+    
+    '''
+    for root, dirs, files in os.walk('../data/data', topdown=False):
+        for name in files:
+            f = open(os.path.join(root, name), )
+            jsondata = json.load(f)
+            for key, value in jsondata.items():
+                id = os.path.basename(root) + key
+                if id not in data:                
+                    data[id] = {}
+                    data[id]['Source'] = os.path.basename(root)
+                    data[id]['File'] = name;
+                    data[id]['Frequency'] = 1;
+                    data[id]['Attribute'] = remove_uncessary_tokens(key);
+                    data[id]['Value'] = []
+                    data[id]['Value'].append(remove_uncessary_tokens(value))
+                else:
+                    if not any(str(value) in s for s in data[id]['Value']):
+                        data[id]['Frequency'] = data[id]['Frequency'] + 1
+                        data[id]['Value'].append( remove_uncessary_tokens(value))
+                datatypes = getDataType(value)
+                for dt in datatypes:
+                    data[id][dt] = 1
+            f.close()
+    return data;
 
 # Reading ground-truth file.
-dt_grndtruthraw = pd.read_csv('../data/monitor_schema_matching_labelled_data.csv')
-dt_grndtruth = pd.DataFrame(dt_grndtruthraw['source_attribute_id,target_attribute_name'].str.split(',').tolist())
+def schemaMatching(data):
+    dt_grndtruthraw = pd.read_csv('../data/monitor_schema_matching_labelled_data.csv')
+    dt_grndtruth = pd.DataFrame(dt_grndtruthraw['source_attribute_id,target_attribute_name'].str.split(',').tolist())
+    
+    # Merging ground-truth with filtered json data.
+    dt_grndtruth[0] = dt_grndtruth[0].apply(lambda x: x.split('//'))
+    for row in dt_grndtruth.values.tolist():
+        id = row[0][0] + row[0][1]
+        if id in data:
+            data[id]['TargetAttribute'] = row[1]
+            
+    return data
 
-# Merging ground-truth with filtered json data.
-dt_grndtruth[0] = dt_grndtruth[0].apply(lambda x: x.split('//'))
-for row in dt_grndtruth.values.tolist():
-    id = row[0][0] + row[0][1]
-    if id in data:
-        data[id]['TargetAttribute'] = row[1]
-        
-df = pd.DataFrame(data);
-dfT = df.T
-dfT.to_csv('out.csv',index=False)
-print(dfT)
+def mergeEntityResolutionInfo(data, pairs, groups):
+    #TODO
+    return data
+
+jsonData = extractJSONFiles()
+pairs, groups = entityResolution()
+jsonData = schemaMatching(jsonData)
+jsonData = mergeEntityResolutionInfo(jsonData, pairs, groups)
+
+df = pd.DataFrame(jsonData).T
+df.to_csv('out.csv',index=False)
+print(df)
