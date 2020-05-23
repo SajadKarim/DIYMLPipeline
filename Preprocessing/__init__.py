@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import csv
 import re
 
+allTypes=['Numeric','Boolean','String','DateTime','Currency','Dimensions','Weight','Ratio','FreqParameters','power']
 # This method eradicates unnecessary tokens and characters for the stream.
 def remove_uncessary_tokens(value):
         value = re.sub(r"[\n\t<>\(\)]+", "", str(value))
@@ -49,6 +50,12 @@ def getDataType(value):
     match = re.search(r'\d+\s?:\s?\d+', str(value))
     if match:
         types.append('Ratio')
+    match = re.search(r'([\d.]+)\s?(KHz|Hz|hz)', str(value))
+    if match:
+        types.append('FreqParameters')
+    match = re.search(r'([\d.]+)\s?(W|w)', str(value))
+    if match:
+        types.append('power')
 
     ''' Important TODOs
     5. Think about other datatypes as well....
@@ -152,7 +159,9 @@ def extractJSONFiles():
     return data;
 
 # Reading ground-truth file.
+grnd_data={}
 def schemaMatching(data):
+    count=0 
     dt_grndtruthraw = pd.read_csv('../data/monitor_schema_matching_labelled_data.csv')
     dt_grndtruth = pd.DataFrame(dt_grndtruthraw['source_attribute_id,target_attribute_name'].str.split(',').tolist())
     
@@ -161,6 +170,20 @@ def schemaMatching(data):
     for row in dt_grndtruth.values.tolist():
         id = row[0][0] + row[0][1]
         if id in data:
+            for x in data[id]['Value']:
+                grnd_data[count]={}
+                grnd_data[count]['Source'] = data[id]['Source']
+                grnd_data[count]['File'] = data[id]['File'];
+                grnd_data[count]['Frequency'] = data[id]['Frequency'];
+                grnd_data[count]['Attribute'] = data[id]['Attribute'];
+                grnd_data[count]['Value'] = x
+                for dt in allTypes:
+                    if dt in data[id]:
+                        grnd_data[count][dt] = data[id][dt]
+                    else:
+                        grnd_data[count][dt] = 0
+                grnd_data[count]['TargetAttribute'] = row[1]
+                count+=1
             data[id]['TargetAttribute'] = row[1]
             
     return data
@@ -177,3 +200,8 @@ jsonData = mergeEntityResolutionInfo(jsonData, pairs, groups)
 df = pd.DataFrame(jsonData).T
 df.to_csv('out.csv',index=False)
 print(df)
+
+df_g = pd.DataFrame(grnd_data);
+dfT_g = df_g.T
+dfT_g.to_csv('out_grnd.csv',index=False)
+print(dfT_g)
