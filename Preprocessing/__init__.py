@@ -11,7 +11,7 @@ import re
 def remove_uncessary_tokens(value):
         value = re.sub(r"[\n\t<>\(\)]+", "", str(value))
         return str(value);
-
+allTypes=['Numeric','Boolean','String','DateTime','Currency','Dimensions','Weight','Ratio','FreqParameters','power']
 # This method tries to deduce primitive and other datatypes that later can be considered as features.
 def getDataType(value):
     types = []
@@ -49,9 +49,20 @@ def getDataType(value):
     match = re.search(r'\d+\s?:\s?\d+', str(value))
     if match:
         types.append('Ratio')
+    match = re.search(r'([\d.]+)\s?(KHz|Hz|hz)', str(value))
+    if match:
+        types.append('FreqParameters')
+    match = re.search(r'([\d.]+)\s?(W|w)', str(value))
+    if match:
+        types.append('power')
 
     ''' Important TODOs
+    Also refine the features (dateTime)
     5. Think about other datatypes as well....
+    6. power
+    7. frequency
+    8. pixel resolution,
+    9. Angles 
     '''    
     return types
 
@@ -104,19 +115,40 @@ for root, dirs, files in os.walk('../data/data', topdown=False):
             for dt in datatypes:
                 data[id][dt] = 1
         f.close()
-
+#print(data)
 # Reading ground-truth file.
 dt_grndtruthraw = pd.read_csv('../data/monitor_schema_matching_labelled_data.csv')
 dt_grndtruth = pd.DataFrame(dt_grndtruthraw['source_attribute_id,target_attribute_name'].str.split(',').tolist())
-
 # Merging ground-truth with filtered json data.
+
+grnd_data={}
+
 dt_grndtruth[0] = dt_grndtruth[0].apply(lambda x: x.split('//'))
+count=0
 for row in dt_grndtruth.values.tolist():
     id = row[0][0] + row[0][1]
     if id in data:
+        for x in data[id]['Value']:
+            grnd_data[count]={}
+            grnd_data[count]['Source'] = data[id]['Source']
+            grnd_data[count]['File'] = data[id]['File'];
+            grnd_data[count]['Frequency'] = data[id]['Frequency'];
+            grnd_data[count]['Attribute'] = data[id]['Attribute'];
+            grnd_data[count]['Value'] = x
+            for dt in allTypes:
+                if dt in data[id]:
+                    grnd_data[count][dt] = data[id][dt]
+                else:
+                    grnd_data[count][dt] = 0
+            grnd_data[count]['TargetAttribute'] = row[1]
+            count+=1
+        #print(data[id])
         data[id]['TargetAttribute'] = row[1]
         
 df = pd.DataFrame(data);
+df_g = pd.DataFrame(grnd_data);
 dfT = df.T
+dfT_g = df_g.T
 dfT.to_csv('out.csv',index=False)
-print(dfT)
+dfT_g.to_csv('out_grnd.csv',index=False)
+#print(dfT)
