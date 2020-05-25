@@ -5,13 +5,8 @@ import os, json
 import pandas as pd
 import matplotlib.pyplot as plt
 import csv
-import re
-
-v = 'ad 12,2x12,2x12,2 in'
-match = re.search(r'(^([\d.]+)\s?(lbs|oz|g|kg)$)|\s+([\d.]+)\s?(lbs|oz|g|kg)\s+', str(v))
-if match:
-    match = re.search(r'(^(\d+(?:,\d+)?)x(\d+(?:,\d+)?)(?:x(\d+(?:,\d+)?))?\s?(cms|in|inch|inches|mms)$)|(\d+(?:,\d+)?)x(\d+(?:,\d+)?)(?:x(\d+(?:,\d+)?))?\s?(cms|in|inch|inches|mms)', v)
-    print ('')
+import re    
+import numpy as np
 
 # This method eradicates unnecessary tokens and characters for the stream.
 def remove_uncessary_tokens(value):
@@ -37,11 +32,12 @@ def getDataType(value):
         types.append('DateTime')
     
     # 12.55$
-    match = re.search(r'(^(\$|£|€)?[+-]?[0-9]{1,3}(?:[0-9]*(?:[.,][0-9]{1})?|(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|(?:\.[0-9]{3})*(?:,[0-9]{1,2})?)(\$|£|€)?$)|(\s+(\$|£|€)?[+-]?[0-9]{1,3}(?:[0-9]*(?:[.,][0-9]{1})?|(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|(?:\.[0-9]{3})*(?:,[0-9]{1,2})?)(\$|£|€)?\s+)', str(value))
+    match = re.search(r'(^(\$|£|€)\s?[+-]?[0-9]{1,3}(?:[0-9]*(?:[.,][0-9]{1})?|(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|(?:\.[0-9]{3})*(?:,[0-9]{1,2})?)$)|(\s+(\$|£|€)\s?[+-]?[0-9]{1,3}(?:[0-9]*(?:[.,][0-9]{1})?|(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|(?:\.[0-9]{3})*(?:,[0-9]{1,2})?)\s+)|(^[+-]?[0-9]{1,3}(?:[0-9]*(?:[.,][0-9]{1})?|(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|(?:\.[0-9]{3})*(?:,[0-9]{1,2})?)\s?(\$|£|€)$)|(\s+[+-]?[0-9]{1,3}(?:[0-9]*(?:[.,][0-9]{1})?|(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|(?:\.[0-9]{3})*(?:,[0-9]{1,2})?)\s?(\$|£|€)\s+)', str(value))
     if match:
-        value = re.sub(r'(^(\$|£|€)?[+-]?[0-9]{1,3}(?:[0-9]*(?:[.,][0-9]{1})?|(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|(?:\.[0-9]{3})*(?:,[0-9]{1,2})?)(\$|£|€)?$)|(\s+(\$|£|€)?[+-]?[0-9]{1,3}(?:[0-9]*(?:[.,][0-9]{1})?|(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|(?:\.[0-9]{3})*(?:,[0-9]{1,2})?)(\$|£|€)?\s+)', '', str(value))
+        value = re.sub(r'(^(\$|£|€)\s?[+-]?[0-9]{1,3}(?:[0-9]*(?:[.,][0-9]{1})?|(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|(?:\.[0-9]{3})*(?:,[0-9]{1,2})?)$)|(\s+(\$|£|€)\s?[+-]?[0-9]{1,3}(?:[0-9]*(?:[.,][0-9]{1})?|(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|(?:\.[0-9]{3})*(?:,[0-9]{1,2})?)\s+)|(^[+-]?[0-9]{1,3}(?:[0-9]*(?:[.,][0-9]{1})?|(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|(?:\.[0-9]{3})*(?:,[0-9]{1,2})?)\s?(\$|£|€)$)|(\s+[+-]?[0-9]{1,3}(?:[0-9]*(?:[.,][0-9]{1})?|(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|(?:\.[0-9]{3})*(?:,[0-9]{1,2})?)\s?(\$|£|€)\s+)', '', str(value))
         types.append('Currency')
 
+    # TODO: Add regex for: 27"
     # TODO: Add regex for this as well: 64.2cm W x 22.7cm D x 44.0cm H - Weight 8.2kg
     #'12.2x12.2x12.2 in'
     match = re.search(r'(^(\d+(?:,\d+)?)x(\d+(?:,\d+)?)(?:x(\d+(?:,\d+)?))?\s?(cms|in|inch|inches|mms)$)|(\d+(?:,\d+)?)x(\d+(?:,\d+)?)(?:x(\d+(?:,\d+)?))?\s?(cms|in|inch|inches|mms)', str(value))
@@ -59,13 +55,13 @@ def getDataType(value):
     match = re.search(r'(^([\d.]+)\s?(mm|cm)$)|\s+([\d.]+)\s?(mm|cm)\s+', str(value))
     if match:
         value = re.sub(r'(^([\d.]+)\s?(mm|cm)$)|\s?([\d.]+)\s?(mm|cm)\s+', '', str(value))
-        types.append('Length')
+        types.append('Scale')
 
     #'15mm'
     match = re.search(r'(^([\d,]+)\s?(mm|cm)$)|\s+([\d,]+)\s?(mm|cm)\s+', str(value))
     if match:
         value = re.sub(r'(^([\d,]+)\s?(mm|cm)$)|\s?([\d,]+)\s?(mm|cm)\s+', '', str(value))
-        types.append('Length')
+        types.append('Scale')
 
     #'10:10'
     match = re.search(r'\d+\s?:\s?\d+', str(value))
@@ -78,9 +74,9 @@ def getDataType(value):
         value = re.sub(r'([\d.]+)\s?(khz|hz)', '', str(value))
         types.append('Frequency')
 
-    match = re.search(r'([\d.]+)\s?(W|w)', str(value))
+    match = re.search(r'^([\d.]+)\s?(W|w)$|\s+([\d.]+)\s?(W|w)\s+', str(value))
     if match:
-        value = re.sub(r'([\d.]+)\s?(W|w)', '', str(value))
+        value = re.sub(r'^([\d.]+)\s?(W|w)$|\s+([\d.]+)\s?(W|w)\s+', '', str(value))
         types.append('Power')
 
     ''' Important TODOs
@@ -187,7 +183,7 @@ def extractJSONFiles():
 
                 datatypes = getDataType(value)
                 for dt in datatypes:
-                    data[index][dt] = 1
+                    data[index][dt] = dt
 
                 index = index + 1
             f.close()
@@ -224,6 +220,12 @@ pairs, groups = entityResolution()
 jsonData, jsonDataForNN = schemaMatching(jsonData, keys)
 jsonData = mergeEntityResolutionInfo(jsonData, pairs, groups)
 
-df = pd.DataFrame(jsonDataForNN).T
+
+df = pd.DataFrame(jsonData).T
 df.to_csv('out.csv',index=False)
+print(df)
+
+df = pd.DataFrame(jsonDataForNN).T
+df = df.replace(np.nan, '', regex=True)
+df.to_csv('outNN.csv',index=False)
 print(df)
