@@ -162,10 +162,13 @@ def extractJSONFiles():
     
     '''
     index = 0
+    counter=0
     for root, dirs, files in os.walk('../data/data', topdown=False):
+        
         for name in files:
             f = open(os.path.join(root, name), )
             jsondata = json.load(f)
+            
             for key, value in jsondata.items():
                 id = os.path.basename(root) + key
                 
@@ -174,18 +177,19 @@ def extractJSONFiles():
                 keys[id].append(index)
                 
                 data[index] = {}
-                data[index]['Source'] = os.path.basename(root)
-                data[index]['File'] = name
-                data[index]['Attribute'] = remove_uncessary_tokens(key)                
-                data[index]['Value'] = remove_uncessary_tokens(value)
-                data[index]['Total Occurrences'] = 1
+                data[index]['Source'] = counter #os.path.basename(root)
+                #data[index]['File'] = name
+                data[index]['Attribute'] = keys[id][0] + 1000;# remove_uncessary_tokens(key)                
+                #data[index]['Value'] = remove_uncessary_tokens(value)
+                #data[index]['Total Occurrences'] = 1
                 data[index]['TargetAttribute'] = ''
-
+                
                 datatypes = getDataType(value)
                 for dt in datatypes:
-                    data[index][dt] = dt
+                    data[index][dt] = 1
 
                 index = index + 1
+            counter+=1
             f.close()
     return data, keys;
 
