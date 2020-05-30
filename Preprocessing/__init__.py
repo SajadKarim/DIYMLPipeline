@@ -7,6 +7,26 @@ import matplotlib.pyplot as plt
 import csv
 import re    
 import numpy as np
+from Preprocessing.kmeansplusplus import trainModel
+from Preprocessing.kmeansplusplus import predict
+from scipy import stats
+import random
+
+from sklearn.feature_extraction.text import TfidfTransformer
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer 
+ 
+from sklearn.model_selection import train_test_split
+ 
+# this is a very toy example, do not try this at home unless you want to understand the usage differences
+docs=["the house had a tiny little mouse",
+      "the cat saw the mouse",
+      "the mouse ran away from the house",
+      "the cat finally ate the mouse",
+      "the end of the mouse story"
+     ]
+
+systemDataTypes =['Numeric','Boolean','String','DateTime','Currency','Dimensions','Weight','Scale','Ratio','Frequency','Power']
 
 # This method eradicates unnecessary tokens and characters for the stream.
 def remove_uncessary_tokens(value):
@@ -164,11 +184,9 @@ def extractJSONFiles():
     index = 0
     counter=0
     for root, dirs, files in os.walk('../data/data', topdown=False):
-        
         for name in files:
             f = open(os.path.join(root, name), )
             jsondata = json.load(f)
-            
             for key, value in jsondata.items():
                 id = os.path.basename(root) + key
                 
@@ -177,19 +195,18 @@ def extractJSONFiles():
                 keys[id].append(index)
                 
                 data[index] = {}
-                data[index]['Source'] = counter #os.path.basename(root)
-                #data[index]['File'] = name
-                data[index]['Attribute'] = keys[id][0] + 1000;# remove_uncessary_tokens(key)                
-                #data[index]['Value'] = remove_uncessary_tokens(value)
-                #data[index]['Total Occurrences'] = 1
+                data[index]['Source'] = os.path.basename(root)
+                data[index]['File'] = name
+                data[index]['Attribute'] = remove_uncessary_tokens(key)                
+                data[index]['Value'] = remove_uncessary_tokens(value)
+                data[index]['Total Occurrences'] = 1
                 data[index]['TargetAttribute'] = ''
-                
+
                 datatypes = getDataType(value)
                 for dt in datatypes:
                     data[index][dt] = 1
 
                 index = index + 1
-            counter+=1
             f.close()
     return data, keys;
 
@@ -223,8 +240,7 @@ jsonData, keys = extractJSONFiles()
 pairs, groups = entityResolution()
 jsonData, jsonDataForNN = schemaMatching(jsonData, keys)
 jsonData = mergeEntityResolutionInfo(jsonData, pairs, groups)
-
-
+'''
 df = pd.DataFrame(jsonData).T
 df.to_csv('out.csv',index=False)
 print(df)
@@ -232,4 +248,22 @@ print(df)
 df = pd.DataFrame(jsonDataForNN).T
 df = df.replace(np.nan, '', regex=True)
 df.to_csv('outNN.csv',index=False)
-print(df)
+'''
+trainData = dict(list(jsonDataForNN.items())[:len(jsonDataForNN)-100])
+testData = dict(list(jsonDataForNN.items())[len(jsonDataForNN)-100:])
+
+clusters, dfClusters, tfidfVectorsSourceAttributes, tfidfVectorsValues = trainModel(trainData, systemDataTypes)
+
+dfClusters.to_csv('clusters.csv',index=False)
+print(dfClusters)
+
+
+for key, value in testData.items():
+    dataTypeArray = predict(dfClusters, tfidfVectorsSourceAttributes, tfidfVectorsValues, value['Attribute'], '', value['Value'])
+    print(dataTypeArray)
+
+'''
+dff = pd.DataFrame(tfidf_vectorizer_vectors.toarray(), columns = tfidf_vectorizer.get_feature_names())
+dff.to_csv('tfids.csv',index=False)
+print(len(tfidf_vectorizer.get_feature_names()))
+'''
