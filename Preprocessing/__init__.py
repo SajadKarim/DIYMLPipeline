@@ -7,8 +7,7 @@ import matplotlib.pyplot as plt
 import csv
 import re    
 import numpy as np
-from Preprocessing.kmeansplusplus import trainModel
-from Preprocessing.kmeansplusplus import predict
+from Preprocessing.kmeansplusplus import KMeansPlusPlus
 from scipy import stats
 import random
 
@@ -17,16 +16,9 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfVectorizer 
  
 from sklearn.model_selection import train_test_split
+from sklearn.utils import shuffle
  
-# this is a very toy example, do not try this at home unless you want to understand the usage differences
-docs=["the house had a tiny little mouse",
-      "the cat saw the mouse",
-      "the mouse ran away from the house",
-      "the cat finally ate the mouse",
-      "the end of the mouse story"
-     ]
-
-systemDataTypes =['Numeric','Boolean','String','DateTime','Currency','Dimensions','Weight','Scale','Ratio','Frequency','Power']
+systemDataTypes =['Numeric','Boolean','String','DateTime','Currency','Dimensions','Weight','Scale','Ratio','Frequency','Power', 'Temperature', 'Colors']
 
 # This method eradicates unnecessary tokens and characters for the stream.
 def remove_uncessary_tokens(value):
@@ -100,6 +92,9 @@ def getDataType(value):
         types.append('Power')
 
     ''' Important TODOs
+    1. Temperature
+    2. Colors
+    ...
     5. Think about other datatypes as well....
     '''    
 
@@ -203,8 +198,11 @@ def extractJSONFiles():
                 data[index]['TargetAttribute'] = ''
 
                 datatypes = getDataType(value)
-                for dt in datatypes:
-                    data[index][dt] = 1
+                for dt in systemDataTypes:
+                    if dt in datatypes: 
+                        data[index][dt] = 1
+                    else:
+                        data[index][dt] = 0
 
                 index = index + 1
             f.close()
@@ -238,32 +236,60 @@ def mergeEntityResolutionInfo(data, pairs, groups):
 
 jsonData, keys = extractJSONFiles()
 pairs, groups = entityResolution()
-jsonData, jsonDataForNN = schemaMatching(jsonData, keys)
+jsonData, jsonDataLabelled = schemaMatching(jsonData, keys)
 jsonData = mergeEntityResolutionInfo(jsonData, pairs, groups)
+
+
 '''
 df = pd.DataFrame(jsonData).T
-df.to_csv('out.csv',index=False)
+df.to_csv('complete_dataset.csv',index=False)
 print(df)
 
-df = pd.DataFrame(jsonDataForNN).T
+df = pd.DataFrame(jsonDataLabelled).T
 df = df.replace(np.nan, '', regex=True)
-df.to_csv('outNN.csv',index=False)
+df.to_csv('labelled_dataset.csv',index=False)
 '''
-trainData = dict(list(jsonDataForNN.items())[:len(jsonDataForNN)-100])
-testData = dict(list(jsonDataForNN.items())[len(jsonDataForNN)-100:])
-
-clusters, dfClusters, tfidfVectorsSourceAttributes, tfidfVectorsValues = trainModel(trainData, systemDataTypes)
-
-dfClusters.to_csv('clusters.csv',index=False)
-print(dfClusters)
+dfCompleteDataset = pd.DataFrame(jsonData).T
+dfCompleteDataset = dfCompleteDataset.replace(np.nan, '', regex=True)
+dfCompleteDataset.to_csv('complete_dataset.csv',index=False)
 
 
-for key, value in testData.items():
-    dataTypeArray = predict(dfClusters, tfidfVectorsSourceAttributes, tfidfVectorsValues, value['Attribute'], '', value['Value'])
-    print(dataTypeArray)
+dfLabelledDataset = pd.DataFrame(jsonDataLabelled).T
+dfLabelledDataset = dfLabelledDataset.replace(np.nan, '', regex=True)
+dfLabelledDataset.to_csv('labelled_dataset.csv',index=False)
 
-'''
-dff = pd.DataFrame(tfidf_vectorizer_vectors.toarray(), columns = tfidf_vectorizer.get_feature_names())
-dff.to_csv('tfids.csv',index=False)
-print(len(tfidf_vectorizer.get_feature_names()))
-'''
+#for i in range(0,10):
+dfLabelledDataset = shuffle(dfLabelledDataset)
+trainData, testData = train_test_split(dfLabelledDataset, test_size=0.02)
+
+kmeanspp = KMeansPlusPlus(trainData, systemDataTypes)
+kmeanspp.trainModel(trainData)
+
+kmeanspp.clustersDataFrame.to_csv('clusters.csv',index=False)
+kmeanspp.sourceAttributesDataFrame.to_csv('tfids_sourceattributes.csv',index=False)
+kmeanspp.valuesDataFrame.to_csv('tfids_values.csv',index=False)
+
+nmatch = 0
+for index, row in testData.iterrows():
+    _matched_clusters = kmeanspp.predict(row['Attribute'], row['Value'], row)
+    if row['TargetAttribute'] in _matched_clusters:
+        nmatch = nmatch + 1
+    #print('actual: ' + row['TargetAttribute'] + ' --- predicted: ' + dataTypeArray)
+    attributeDataTypes = []
+    for datatype in systemDataTypes:
+        if datatype in row.index and row[datatype] == 1:
+            attributeDataTypes.append(datatype)
+    kmeanspp.addPredictedDataToCluster(row['TargetAttribute'], row['Attribute'], row['Value'], attributeDataTypes)
+    kmeanspp.retrainModel()
+    
+print('total test records: ' + str(len(testData.index)) + ', successful matches: ' + str(nmatch))
+print('success %: ' + str( (nmatch/len(testData.index)) * 100))
+
+total_recs = len(dfCompleteDataset.index)
+for index, row in dfCompleteDataset.iterrows():
+    if not row['TargetAttribute']:
+        _matched_clusters = kmeanspp.predict(row['Attribute'], row['Value'], row)
+        row['TargetAttribute'] = _matched_clusters[0]
+        print(str(index) + '/' + str(total_recs))
+
+dfCompleteDataset.to_csv('clusters_with_results.csv',index=False)
