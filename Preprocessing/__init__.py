@@ -7,7 +7,8 @@ import matplotlib.pyplot as plt
 import csv
 import re    
 import numpy as np
-from Preprocessing.kmeansplusplus import KMeansPlusPlus
+#import KMeansPlusPlus
+from kmeansplusplus import KMeansPlusPlus
 from scipy import stats
 import random
 
@@ -25,7 +26,7 @@ comments = ['why', 'where', 'when', 'what', 'which', 'who', 'whose','whom']
 
 # This method eradicates unnecessary tokens and characters for the stream.
 def remove_uncessary_tokens(value):
-        value = re.sub(r"[\n\t<>\(\)]+", "", str(value))
+        value = re.sub(r"[\n\t<>\(\),;]+", "", str(value))
         return str(value);
 
 # This method tries to deduce primitive and other datatypes that later can be considered as features.
@@ -241,48 +242,85 @@ def mergeEntityResolutionInfo(data, pairs, groups):
     return data
 
 jsonData, keys = extractJSONFiles()
+#pairs, groups = entityResolution()
+jsonData, jsonDataLabelled = schemaMatching(jsonData, keys)
+#jsonData = mergeEntityResolutionInfo(jsonData, pairs, groups)
 
 
 _groupeddata = []
+_groupeddatatrain = []
+
 _groupheader = []
-_groupheader.append('key')
-_groupheader.append('value')
+_groupheader.append('Source')
+_groupheader.append('Attribute')
+_groupheader.append('TargetAttribute')
+_groupheader.append('Value')
 for datatype in systemDataTypes:
     _groupheader.append(datatype)
+#for datatype in _feature_array:
+#    _groupheader.append(datatype)
 _groupeddata.append(_groupheader)
+_groupeddatatrain.append(_groupheader)
 
 for key in keys:
     
     _groupinstance = []
-    _groupinstance.append(key)
     _groupinstance.append('')
+    _groupinstance.append('')
+    _groupinstance.append('')
+    _groupinstance.append('')
+
     for datatype in systemDataTypes:
         _groupinstance.append(0)
+    #for datatype in _feature_array:
+     #   _groupinstance.append(0)
         
     for instance in keys[key]:
-        _groupinstance[1]= _groupinstance[1] + ' ' + jsonData[instance]['Value']  
+        _groupinstance[0]= jsonData[instance]['Source']  
+        _groupinstance[1]= jsonData[instance]['Attribute']
+        _groupinstance[2]= jsonData[instance]['TargetAttribute']
+        _groupinstance[3]= _groupinstance[3] + ' ' + jsonData[instance]['Value']
         
-        _index = 2
+        _index = 4
         for datatype in systemDataTypes:
             _groupinstance[_index] = int(_groupinstance[_index]) + int(jsonData[instance][datatype])
             _index = _index + 1
     
         _total = 0
-        _index = 2
+        _index = 4
         for datatype in systemDataTypes:
             _total = _total + _groupinstance[_index]
             _index = _index + 1
 
-        _index = 2
+        _index = 4
         for datatype in systemDataTypes:
             _groupinstance[_index] = (int(_groupinstance[_index]) / _total ) * 100
             _index = _index + 1
+            
+        '''for datatype in _feature_array:
+            if datatype in jsonData[instance]:
+                _groupinstance[_index] =  int(_groupinstance[_index]) + int(jsonData[instance][datatype])
+                _index = _index + 1'''
+            
+    
+    if str(_groupinstance[2]):
+        _groupeddatatrain.append(_groupinstance)
+    else:
+        _groupeddata.append(_groupinstance)
+df = pd.DataFrame(_groupeddata)
+new_header = df.iloc[0] #grab the first row for the header
+df = df[1:] #take the data less the header row
+df.columns = new_header
+df=df.drop_duplicates(subset=['Source','Attribute'])
+dfT = pd.DataFrame(_groupeddatatrain)
+new_header = dfT.iloc[0] #grab the first row for the header
+dfT = dfT[1:] #take the data less the header row
+dfT.columns = new_header
+dfT=dfT.drop_duplicates(subset=['Source','Attribute'])
+print (df)
+df.to_csv('mergedOut.csv',index=False)
+dfT.to_csv('mergedOutTrain.csv',index=False)
 
-    _groupeddata.append(_groupinstance)
-
-pairs, groups = entityResolution()
-jsonData, jsonDataLabelled = schemaMatching(jsonData, keys)
-jsonData = mergeEntityResolutionInfo(jsonData, pairs, groups)
 
 
 '''
@@ -337,6 +375,10 @@ print('success %: ' + str( (nmatch/len(testData.index)) * 100))
 f = open('output.csv', 'w', buffering = 1)
 f.write("source_attribute_id, target_attribute_name\n")
 
+dfCompleteDataset= pd.read_csv("cleaned2.csv")
+
+#dfCompleteDataset=dfCompleteDataset.dropna(axis=0, how="any")
+print(dfCompleteDataset)
 for index, row in dfCompleteDataset.iterrows():
     if not row['TargetAttribute']:
         attributeDataTypes = []
@@ -352,8 +394,8 @@ for index, row in dfCompleteDataset.iterrows():
         
         kmeanspp.retrainModel()
 
-
-        row['TargetAttribute'] = _matched_clusters[0]
+        if len(_matched_clusters)>0:
+            row['TargetAttribute'] = _matched_clusters[0]
         #print(str(index) + '/' + str(total_recs))
 
 #dfCompleteDataset.to_csv('clusters_with_results.csv',index=False)
