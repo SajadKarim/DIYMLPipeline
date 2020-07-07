@@ -11,6 +11,7 @@ import numpy as np
 from kmeansplusplus import KMeansPlusPlus
 from scipy import stats
 import random
+from tqdm import tqdm
 
 from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.feature_extraction.text import CountVectorizer
@@ -255,6 +256,7 @@ _groupheader.append('Source')
 _groupheader.append('Attribute')
 _groupheader.append('TargetAttribute')
 _groupheader.append('Value')
+_groupheader.append('Avg')
 for datatype in systemDataTypes:
     _groupheader.append(datatype)
 #for datatype in _feature_array:
@@ -269,6 +271,7 @@ for key in keys:
     _groupinstance.append('')
     _groupinstance.append('')
     _groupinstance.append('')
+    _groupinstance.append([])
 
     for datatype in systemDataTypes:
         _groupinstance.append(0)
@@ -280,19 +283,20 @@ for key in keys:
         _groupinstance[1]= jsonData[instance]['Attribute']
         _groupinstance[2]= jsonData[instance]['TargetAttribute']
         _groupinstance[3]= _groupinstance[3] + ' ' + jsonData[instance]['Value']
+        _groupinstance[4].append(len(jsonData[instance]['Value']))
         
-        _index = 4
+        _index = 5
         for datatype in systemDataTypes:
             _groupinstance[_index] = int(_groupinstance[_index]) + int(jsonData[instance][datatype])
             _index = _index + 1
     
         _total = 0
-        _index = 4
+        _index = 5
         for datatype in systemDataTypes:
             _total = _total + _groupinstance[_index]
             _index = _index + 1
 
-        _index = 4
+        _index = 5
         for datatype in systemDataTypes:
             _groupinstance[_index] = (int(_groupinstance[_index]) / _total ) * 100
             _index = _index + 1
@@ -301,7 +305,16 @@ for key in keys:
             if datatype in jsonData[instance]:
                 _groupinstance[_index] =  int(_groupinstance[_index]) + int(jsonData[instance][datatype])
                 _index = _index + 1'''
-            
+    avg_val=np.mean(_groupinstance[4])
+    #print(avg_val)
+    _groupinstance[4]=avg_val
+    val_arr=_groupinstance[3].split(" ")
+    a_set=set(val_arr)
+    list_of_strings = [str(s) for s in a_set]
+    joined_string = " ".join(list_of_strings)
+    _groupinstance[3]=joined_string
+    
+    
     
     if str(_groupinstance[2]):
         _groupeddatatrain.append(_groupinstance)
@@ -353,7 +366,7 @@ kmeanspp.trainModel(trainData)
 #kmeanspp.valuesDataFrame.to_csv('tfids_values.csv',index=False)
 
 nmatch = 0
-for index, row in testData.iterrows():
+for index, row in tqdm(testData.iterrows()):
     attributeDataTypes = []
     for datatype in systemDataTypes:
         if datatype in row.index and row[datatype] == 1:
@@ -379,18 +392,18 @@ dfCompleteDataset= pd.read_csv("cleaned2.csv")
 
 #dfCompleteDataset=dfCompleteDataset.dropna(axis=0, how="any")
 print(dfCompleteDataset)
-for index, row in dfCompleteDataset.iterrows():
+for index, row in tqdm(dfCompleteDataset.iterrows()):
     if not row['TargetAttribute']:
         attributeDataTypes = []
         for datatype in systemDataTypes:
-            if datatype in row.index and row[datatype] == 1:
+            if datatype in row.index and row[datatype] > 0:
                 attributeDataTypes.append(datatype)
 
-        _matched_clusters = kmeanspp.predict(row['Attribute'], row['Value'], attributeDataTypes)
+        _matched_clusters = kmeanspp.predict_(row['Attribute'], row['Value'],row['Avg'], attributeDataTypes)
         
         for _targetattribute in _matched_clusters:
-            f.write(row['Source'] + '//' + row['Attribute'] + ',' + _matched_clusters[0] + '\n')
-            kmeanspp.addPredictedDataToCluster(_targetattribute, row['Attribute'], row['Value'], attributeDataTypes)
+            f.write(row['Source'] + '//' + row['Attribute'] + ',' + _targetattribute + '\n')
+            #kmeanspp.addPredictedDataToCluster(_targetattribute, row['Attribute'], row['Value'], attributeDataTypes)
         
         kmeanspp.retrainModel()
 
